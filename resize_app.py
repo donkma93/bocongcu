@@ -9,6 +9,7 @@ import tkinter as tk
 import customtkinter as ctk
 from PIL import Image, ImageTk
 from PIL import ImageDraw
+from ftp_client import FTPClientFrame
 
 # Cấu hình giao diện CustomTkinter
 ctk.set_appearance_mode("Dark")
@@ -76,9 +77,11 @@ class ImageResizerApp(ctk.CTk):
         self.tabview.grid(row=1, column=0, padx=20, pady=(5, 5), sticky="nsew")
         self.tabview.add("Xử lý Ảnh")
         self.tabview.add("Công cụ PDF")
+        self.tabview.add("FTP Client")
 
         self.setup_image_tab()
         self.setup_pdf_tab()
+        self.setup_ftp_tab()
 
         # THANH TIẾN TRÌNH DÙNG CHUNG
         self.progress_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -309,6 +312,17 @@ class ImageResizerApp(ctk.CTk):
             command=self.execute_print_pdf, height=34
         )
         self.btn_print_now.grid(row=9, column=0, padx=12, pady=(3, 12), sticky="ew")
+
+    # =========================================================
+    # TAB FTP CLIENT
+    # =========================================================
+
+    def setup_ftp_tab(self):
+        tab = self.tabview.tab("FTP Client")
+        tab.grid_columnconfigure(0, weight=1)
+        tab.grid_rowconfigure(0, weight=1)
+        ftp_frame = FTPClientFrame(tab)
+        ftp_frame.grid(row=0, column=0, sticky="nsew")
 
     # =========================================================
     # LOGIC PDF – MỞ VÀ HIỂN THỊ

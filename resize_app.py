@@ -75,6 +75,10 @@ class ImageResizerApp(ctk.CTk):
         self.canvas_sel_rect = None       # Canvas rectangle ID
         self.pdf_to_print = ctk.StringVar(value="")
         self.print_after_merge = ctk.BooleanVar(value=False)
+        self.pdf_split_path = ctk.StringVar(value="")
+        self.pdf_split_ranges = ctk.StringVar(value="")
+        self.pdf_split_output_dir = ctk.StringVar(value=str(Path.home() / "Documents"))
+        self.pdf_merge_files = []
         self.active_screen = "home"
         self.screens = {}
         self.ffmpeg_path = shutil.which("ffmpeg")
@@ -170,6 +174,7 @@ class ImageResizerApp(ctk.CTk):
         self.setup_home_screen()
         self.setup_image_tab()
         self.setup_pdf_tab()
+        self.setup_pdf_merge_split_tab()
         self.setup_ftp_tab()
         self.setup_youtube_tab()
         self.show_screen("home")
@@ -219,6 +224,7 @@ class ImageResizerApp(ctk.CTk):
             "home": "✨ Bộ Công cụ Tiện ích (Ảnh & PDF) ✨",
             "image": "🖼️ Công cụ Xử lý Ảnh",
             "pdf": "📄 Công cụ PDF",
+            "pdf_merge_split": "Tách/Gộp PDF",
             "ftp": "🌐 FTP Client",
             "youtube": "🎬 Tải Video YouTube",
         }
@@ -300,6 +306,7 @@ class ImageResizerApp(ctk.CTk):
         cards = [
             ("image", "🖼️", "Xử lý Ảnh", "Resize hàng loạt, đổi định dạng, giữ tỷ lệ", "#3B82F6"),
             ("pdf", "📄", "Công cụ PDF", "Mở toàn bộ PDF, cắt nhiều vùng, gộp để in", "#10B981"),
+            ("pdf_merge_split", "PDF", "Tách/Gộp PDF", "Tách trang theo khoảng và gộp nhiều PDF", "#A78BFA"),
             ("ftp", "🌐", "FTP Client", "Kết nối, duyệt và thao tác tệp từ server", "#F59E0B"),
             ("youtube", "🎬", "Tải YouTube", "Phân tích link, chọn video hoặc âm thanh, rồi tải đúng chất lượng", "#EF4444"),
         ]
@@ -560,6 +567,86 @@ class ImageResizerApp(ctk.CTk):
             command=self.execute_print_pdf, height=34
         )
         self.btn_print_now.grid(row=9, column=0, padx=12, pady=(3, 12), sticky="ew")
+
+    # =========================================================
+    # TAB TÁCH/GỘP PDF
+    # =========================================================
+
+    def setup_pdf_merge_split_tab(self):
+        tab = self.create_tool_screen(
+            "pdf_merge_split",
+            "Tách/Gộp PDF",
+            "Tách file PDF theo khoảng trang và gộp nhiều file PDF theo đúng thứ tự.",
+            "#C4B5FD"
+        )
+        tab.grid_columnconfigure(0, weight=1)
+        tab.grid_columnconfigure(1, weight=1)
+        tab.grid_rowconfigure(0, weight=1)
+
+        split_frame = ctk.CTkFrame(tab)
+        split_frame.grid(row=0, column=0, padx=(8, 4), pady=8, sticky="nsew")
+        split_frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(split_frame, text="Tách file PDF", font=ctk.CTkFont(size=16, weight="bold"), text_color="#C4B5FD").grid(row=0, column=0, columnspan=3, padx=14, pady=(14, 8), sticky="w")
+        ctk.CTkLabel(split_frame, text="File nguồn:", anchor="w", width=105).grid(row=1, column=0, padx=(14, 6), pady=6, sticky="w")
+        ctk.CTkEntry(split_frame, textvariable=self.pdf_split_path, placeholder_text="Chọn file PDF cần tách...", state="readonly").grid(row=1, column=1, padx=6, pady=6, sticky="ew")
+        ctk.CTkButton(split_frame, text="Chọn...", width=90, command=self.browse_pdf_split_file).grid(row=1, column=2, padx=(6, 14), pady=6)
+
+        ctk.CTkLabel(split_frame, text="Khoảng trang:", anchor="w", width=105).grid(row=2, column=0, padx=(14, 6), pady=6, sticky="w")
+        ctk.CTkEntry(split_frame, textvariable=self.pdf_split_ranges, placeholder_text="Ví dụ: 1-3,5,8-10").grid(row=2, column=1, columnspan=2, padx=(6, 14), pady=6, sticky="ew")
+
+        ctk.CTkLabel(split_frame, text="Thư mục lưu:", anchor="w", width=105).grid(row=3, column=0, padx=(14, 6), pady=6, sticky="w")
+        ctk.CTkEntry(split_frame, textvariable=self.pdf_split_output_dir, placeholder_text="Chọn thư mục xuất file...", state="readonly").grid(row=3, column=1, padx=6, pady=6, sticky="ew")
+        ctk.CTkButton(split_frame, text="Chọn...", width=90, command=self.browse_pdf_split_output).grid(row=3, column=2, padx=(6, 14), pady=6)
+
+        ctk.CTkLabel(
+            split_frame,
+            text="Mỗi khoảng trang sẽ được lưu thành một file PDF riêng. Để trống khoảng trang nếu muốn tách từng trang.",
+            text_color=MUTED_TEXT,
+            wraplength=360,
+            justify="left"
+        ).grid(row=4, column=0, columnspan=3, padx=14, pady=(4, 10), sticky="w")
+
+        self.btn_split_pdf = ctk.CTkButton(
+            split_frame,
+            text="Tách PDF",
+            fg_color="#8B5CF6",
+            hover_color="#7C3AED",
+            font=ctk.CTkFont(weight="bold"),
+            command=self.split_pdf_file,
+            height=38
+        )
+        self.btn_split_pdf.grid(row=5, column=0, columnspan=3, padx=14, pady=(6, 14), sticky="ew")
+
+        merge_frame = ctk.CTkFrame(tab)
+        merge_frame.grid(row=0, column=1, padx=(4, 8), pady=8, sticky="nsew")
+        merge_frame.grid_columnconfigure(0, weight=1)
+        merge_frame.grid_rowconfigure(2, weight=1)
+
+        ctk.CTkLabel(merge_frame, text="Gộp nhiều file PDF", font=ctk.CTkFont(size=16, weight="bold"), text_color="#C4B5FD").grid(row=0, column=0, padx=14, pady=(14, 8), sticky="w")
+
+        btn_row = ctk.CTkFrame(merge_frame, fg_color="transparent")
+        btn_row.grid(row=1, column=0, padx=14, pady=(0, 6), sticky="ew")
+        btn_row.grid_columnconfigure(0, weight=1)
+        btn_row.grid_columnconfigure(1, weight=1)
+        ctk.CTkButton(btn_row, text="Thêm PDF...", command=self.add_pdf_merge_files, height=30).grid(row=0, column=0, padx=(0, 4), sticky="ew")
+        ctk.CTkButton(btn_row, text="Xóa tất cả", fg_color="#4B5563", hover_color="#374151", command=self.clear_pdf_merge_files, height=30).grid(row=0, column=1, padx=(4, 0), sticky="ew")
+
+        self.pdf_merge_list_frame = ctk.CTkScrollableFrame(merge_frame, label_text="Thứ tự gộp (trên → dưới):")
+        self.pdf_merge_list_frame.grid(row=2, column=0, padx=14, pady=6, sticky="nsew")
+        self.pdf_merge_list_frame.grid_columnconfigure(0, weight=1)
+
+        self.btn_merge_pdf_files = ctk.CTkButton(
+            merge_frame,
+            text="Gộp PDF",
+            fg_color="#10B981",
+            hover_color="#059669",
+            font=ctk.CTkFont(weight="bold"),
+            command=self.merge_pdf_files,
+            height=38
+        )
+        self.btn_merge_pdf_files.grid(row=3, column=0, padx=14, pady=(6, 14), sticky="ew")
+        self.refresh_pdf_merge_list_ui()
 
     # =========================================================
     # TAB FTP CLIENT
@@ -1113,6 +1200,241 @@ class ImageResizerApp(ctk.CTk):
             messagebox.showerror("Lỗi", f"Không thể in tệp:\n{e}")
 
     # =========================================================
+    # LOGIC TÁCH/GỘP FILE PDF
+    # =========================================================
+
+    def browse_pdf_split_file(self):
+        path = filedialog.askopenfilename(title="Chọn file PDF cần tách", filetypes=[("PDF", "*.pdf")])
+        if path:
+            self.pdf_split_path.set(path)
+            self.log(f"[PDF] File cần tách: {path}")
+
+    def browse_pdf_split_output(self):
+        folder = filedialog.askdirectory(title="Chọn thư mục lưu file PDF đã tách")
+        if folder:
+            self.pdf_split_output_dir.set(folder)
+            self.log(f"[PDF] Thư mục lưu file tách: {folder}")
+
+    def split_pdf_file(self):
+        input_path = self.pdf_split_path.get().strip()
+        output_dir = self.pdf_split_output_dir.get().strip()
+        ranges_text = self.pdf_split_ranges.get().strip()
+
+        if not input_path or not os.path.exists(input_path):
+            messagebox.showerror("Lỗi", "Vui lòng chọn file PDF nguồn hợp lệ.")
+            return
+        if not output_dir:
+            messagebox.showerror("Lỗi", "Vui lòng chọn thư mục lưu file PDF đã tách.")
+            return
+
+        os.makedirs(output_dir, exist_ok=True)
+        self.log_clear()
+        self.log(f"[PDF] Bắt đầu tách: {Path(input_path).name}")
+        self.btn_split_pdf.configure(state="disabled")
+        self.lbl_progress.configure(text="Đang chuẩn bị tách PDF...")
+        self.progressbar.set(0)
+        self.lbl_progress_percent.configure(text="0%")
+
+        threading.Thread(
+            target=self._split_pdf_file_thread,
+            args=(input_path, output_dir, ranges_text),
+            daemon=True
+        ).start()
+
+    def _split_pdf_file_thread(self, input_path, output_dir, ranges_text):
+        import fitz
+        doc = None
+        try:
+            doc = fitz.open(input_path)
+            ranges = self._parse_pdf_page_ranges(ranges_text, len(doc))
+            base_name = Path(input_path).stem
+            total = len(ranges)
+            output_files = []
+
+            for index, (start_page, end_page) in enumerate(ranges, start=1):
+                out_doc = fitz.open()
+                out_doc.insert_pdf(doc, from_page=start_page - 1, to_page=end_page - 1)
+                if start_page == end_page:
+                    suffix = f"trang_{start_page:03d}"
+                else:
+                    suffix = f"trang_{start_page:03d}-{end_page:03d}"
+                output_path = Path(output_dir) / f"{base_name}_{suffix}.pdf"
+                out_doc.save(str(output_path), garbage=4, deflate=True)
+                out_doc.close()
+                output_files.append(str(output_path))
+
+                progress = index / max(total, 1)
+                self.after(0, lambda p=progress: self.progressbar.set(p))
+                self.after(0, lambda p=progress: self.lbl_progress_percent.configure(text=f"{int(p * 100)}%"))
+                self.after(0, lambda i=index, t=total: self.lbl_progress.configure(text=f"Đang tách PDF... {i}/{t}"))
+
+            self.after(0, lambda: self._finish_split_pdf(output_dir, output_files))
+        except Exception as e:
+            self.after(0, lambda: self._handle_pdf_tool_error(f"Tách PDF thất bại: {e}", self.btn_split_pdf))
+        finally:
+            if doc:
+                doc.close()
+
+    def _parse_pdf_page_ranges(self, ranges_text, total_pages):
+        if total_pages <= 0:
+            raise ValueError("File PDF không có trang nào.")
+        if not ranges_text:
+            return [(page, page) for page in range(1, total_pages + 1)]
+
+        ranges = []
+        for part in ranges_text.replace(" ", "").split(","):
+            if not part:
+                continue
+            if "-" in part:
+                start_text, end_text = part.split("-", 1)
+                start_page = int(start_text)
+                end_page = int(end_text)
+            else:
+                start_page = end_page = int(part)
+            if start_page < 1 or end_page < 1 or start_page > end_page or end_page > total_pages:
+                raise ValueError(f"Khoảng trang không hợp lệ: {part}. File có {total_pages} trang.")
+            ranges.append((start_page, end_page))
+
+        if not ranges:
+            raise ValueError("Vui lòng nhập khoảng trang hợp lệ.")
+        return ranges
+
+    def _finish_split_pdf(self, output_dir, output_files):
+        self.progressbar.set(1.0)
+        self.lbl_progress_percent.configure(text="100%")
+        self.lbl_progress.configure(text="Tách PDF hoàn tất.")
+        self.btn_split_pdf.configure(state="normal")
+        self.log(f"[THÀNH CÔNG] Đã tạo {len(output_files)} file trong: {output_dir}")
+        for path in output_files[:20]:
+            self.log(f"[PDF] {path}")
+        if len(output_files) > 20:
+            self.log(f"[PDF] ... và {len(output_files) - 20} file khác")
+
+    def add_pdf_merge_files(self):
+        paths = filedialog.askopenfilenames(title="Chọn các file PDF cần gộp", filetypes=[("PDF", "*.pdf")])
+        if not paths:
+            return
+        added = 0
+        existing = set(self.pdf_merge_files)
+        for path in paths:
+            if path not in existing:
+                self.pdf_merge_files.append(path)
+                existing.add(path)
+                added += 1
+        self.log(f"[PDF] Đã thêm {added} file vào danh sách gộp.")
+        self.refresh_pdf_merge_list_ui()
+
+    def clear_pdf_merge_files(self):
+        self.pdf_merge_files.clear()
+        self.log("[PDF] Đã xóa danh sách file cần gộp.")
+        self.refresh_pdf_merge_list_ui()
+
+    def move_pdf_merge_file_up(self, index):
+        if index > 0:
+            self.pdf_merge_files[index], self.pdf_merge_files[index - 1] = self.pdf_merge_files[index - 1], self.pdf_merge_files[index]
+            self.refresh_pdf_merge_list_ui()
+
+    def move_pdf_merge_file_down(self, index):
+        if index < len(self.pdf_merge_files) - 1:
+            self.pdf_merge_files[index], self.pdf_merge_files[index + 1] = self.pdf_merge_files[index + 1], self.pdf_merge_files[index]
+            self.refresh_pdf_merge_list_ui()
+
+    def remove_pdf_merge_file(self, index):
+        removed = self.pdf_merge_files.pop(index)
+        self.log(f"[PDF] Đã xóa khỏi danh sách gộp: {Path(removed).name}")
+        self.refresh_pdf_merge_list_ui()
+
+    def refresh_pdf_merge_list_ui(self):
+        for widget in self.pdf_merge_list_frame.winfo_children():
+            widget.destroy()
+
+        if not self.pdf_merge_files:
+            ctk.CTkLabel(self.pdf_merge_list_frame, text="(Chưa có file PDF nào)", text_color=MUTED_TEXT).grid(row=0, column=0, padx=10, pady=10)
+            return
+
+        for index, path in enumerate(self.pdf_merge_files):
+            row = ctk.CTkFrame(self.pdf_merge_list_frame, fg_color=ROW_BG, corner_radius=6)
+            row.grid(row=index, column=0, padx=4, pady=3, sticky="ew")
+            row.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(row, text=f"{index + 1}. {Path(path).name}", anchor="w", font=ctk.CTkFont(size=11, weight="bold")).grid(row=0, column=0, padx=8, pady=(6, 0), sticky="ew")
+            ctk.CTkLabel(row, text=path, anchor="w", text_color=MUTED_TEXT, font=ctk.CTkFont(size=10)).grid(row=1, column=0, padx=8, pady=(0, 6), sticky="ew")
+            buttons = ctk.CTkFrame(row, fg_color="transparent")
+            buttons.grid(row=0, column=1, rowspan=2, padx=4, pady=4)
+            ctk.CTkButton(buttons, text="▲", width=26, height=24, state="normal" if index > 0 else "disabled", command=lambda i=index: self.move_pdf_merge_file_up(i)).grid(row=0, column=0, padx=1)
+            ctk.CTkButton(buttons, text="▼", width=26, height=24, state="normal" if index < len(self.pdf_merge_files) - 1 else "disabled", command=lambda i=index: self.move_pdf_merge_file_down(i)).grid(row=0, column=1, padx=1)
+            ctk.CTkButton(buttons, text="X", width=26, height=24, fg_color="#EF4444", hover_color="#DC2626", command=lambda i=index: self.remove_pdf_merge_file(i)).grid(row=0, column=2, padx=1)
+
+    def merge_pdf_files(self):
+        input_paths = self.pdf_merge_files.copy()
+        if len(input_paths) < 2:
+            messagebox.showerror("Lỗi", "Vui lòng chọn ít nhất 2 file PDF để gộp.")
+            return
+        missing = [path for path in input_paths if not os.path.exists(path)]
+        if missing:
+            messagebox.showerror("Lỗi", f"Một số file không tồn tại:\n{missing[0]}")
+            return
+
+        output_path = filedialog.asksaveasfilename(
+            title="Lưu file PDF đã gộp",
+            defaultextension=".pdf",
+            filetypes=[("PDF", "*.pdf")]
+        )
+        if not output_path:
+            return
+
+        self.log_clear()
+        self.log(f"[PDF] Bắt đầu gộp {len(input_paths)} file PDF...")
+        self.btn_merge_pdf_files.configure(state="disabled")
+        self.lbl_progress.configure(text="Đang chuẩn bị gộp PDF...")
+        self.progressbar.set(0)
+        self.lbl_progress_percent.configure(text="0%")
+
+        threading.Thread(
+            target=self._merge_pdf_files_thread,
+            args=(input_paths, output_path),
+            daemon=True
+        ).start()
+
+    def _merge_pdf_files_thread(self, input_paths, output_path):
+        import fitz
+        out_doc = None
+        try:
+            out_doc = fitz.open()
+            total = len(input_paths)
+            for index, path in enumerate(input_paths, start=1):
+                src = fitz.open(path)
+                out_doc.insert_pdf(src)
+                src.close()
+
+                progress = index / max(total, 1)
+                self.after(0, lambda p=progress: self.progressbar.set(p))
+                self.after(0, lambda p=progress: self.lbl_progress_percent.configure(text=f"{int(p * 100)}%"))
+                self.after(0, lambda i=index, t=total: self.lbl_progress.configure(text=f"Đang gộp PDF... {i}/{t}"))
+
+            out_doc.save(output_path, garbage=4, deflate=True)
+            self.after(0, lambda: self._finish_merge_pdf(output_path, total))
+        except Exception as e:
+            self.after(0, lambda: self._handle_pdf_tool_error(f"Gộp PDF thất bại: {e}", self.btn_merge_pdf_files))
+        finally:
+            if out_doc:
+                out_doc.close()
+
+    def _finish_merge_pdf(self, output_path, total_files):
+        self.progressbar.set(1.0)
+        self.lbl_progress_percent.configure(text="100%")
+        self.lbl_progress.configure(text="Gộp PDF hoàn tất.")
+        self.btn_merge_pdf_files.configure(state="normal")
+        self.log(f"[THÀNH CÔNG] Đã gộp {total_files} file thành: {output_path}")
+
+    def _handle_pdf_tool_error(self, message, button):
+        self.lbl_progress.configure(text="Lỗi xử lý PDF.")
+        self.progressbar.set(0)
+        self.lbl_progress_percent.configure(text="0%")
+        button.configure(state="normal")
+        self.log(f"[LỖI] {message}")
+        messagebox.showerror("Lỗi", message)
+
+    # =========================================================
     # LOGIC TẢI YOUTUBE
     # =========================================================
 
@@ -1254,6 +1576,11 @@ class ImageResizerApp(ctk.CTk):
                 "no_warnings": True,
                 "noplaylist": True,
                 "ignoreconfig": True,
+                "continuedl": True,
+                "retries": 10,
+                "fragment_retries": 10,
+                "file_access_retries": 5,
+                "socket_timeout": 30,
                 "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
                 "outtmpl": str(Path(output_dir) / "%(title).180B [%(id)s].%(ext)s"),
                 "progress_hooks": [self._youtube_progress_hook],
@@ -1266,19 +1593,21 @@ class ImageResizerApp(ctk.CTk):
                 if selected.get("requires_ffmpeg") and not self.ffmpeg_available:
                     raise RuntimeError("Lựa chọn âm thanh này cần FFmpeg để tách khỏi video, nhưng FFmpeg trên máy hiện không dùng được.")
                 ydl_opts["format"] = selected["format_selector"]
-                if self.ffmpeg_available:
-                    ydl_opts["postprocessors"] = [{
+                ydl_opts["final_ext"] = selected.get("ext", "audio").lower()
+                ydl_opts["postprocessors"] = []
+                if selected.get("requires_ffmpeg"):
+                    ydl_opts["postprocessors"].append({
                         "key": "FFmpegExtractAudio",
-                        "preferredcodec": "mp3",
+                        "preferredcodec": selected.get("ext", "best").lower(),
                         "preferredquality": "0",
-                    }]
+                    })
 
             previous_path = os.environ.get("PATH", "")
             try:
                 os.environ["PATH"] = self._build_sanitized_env().get("PATH", previous_path)
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=True)
-                    output_file = ydl.prepare_filename(info)
+                    output_file = self._resolve_youtube_output_file(ydl, info, output_dir)
             finally:
                 os.environ["PATH"] = previous_path
 
@@ -1307,6 +1636,36 @@ class ImageResizerApp(ctk.CTk):
             self.after(0, lambda m=msg: self.lbl_progress.configure(text=m))
         elif status == "finished":
             self.after(0, lambda: self.lbl_progress.configure(text="Đang hoàn tất và ghép tệp..."))
+
+    def _resolve_youtube_output_file(self, ydl, info, output_dir):
+        requested_downloads = info.get("requested_downloads") or []
+        for item in requested_downloads:
+            filepath = item.get("filepath") or item.get("filename")
+            if filepath and os.path.exists(filepath):
+                return filepath
+
+        candidates = []
+        filename = info.get("filepath") or info.get("_filename")
+        if filename:
+            candidates.append(filename)
+        candidates.append(ydl.prepare_filename(info))
+
+        requested_formats = info.get("requested_formats") or []
+        candidates.extend(
+            item.get("filepath") or item.get("filename")
+            for item in requested_formats
+            if item.get("filepath") or item.get("filename")
+        )
+
+        for candidate in candidates:
+            if candidate and os.path.exists(candidate):
+                return candidate
+
+        output_path = Path(output_dir)
+        existing_files = [path for path in output_path.iterdir() if path.is_file()]
+        if existing_files:
+            return str(max(existing_files, key=lambda path: path.stat().st_mtime))
+        return candidates[0] if candidates else ""
 
     def _finish_youtube_download(self, output_dir, output_file):
         self.progressbar.set(1.0)
@@ -1361,15 +1720,18 @@ class ImageResizerApp(ctk.CTk):
                 })
 
             if acodec and acodec != "none" and (not vcodec or vcodec == "none"):
-                abr = fmt.get("abr") or fmt.get("asr") or 0
+                abr = fmt.get("abr") or 0
+                asr = fmt.get("asr") or 0
                 detail_suffix = f" | {filesize}" if filesize != "?" else ""
-                label = f"{int(abr) if abr else '?'} kbps | {ext} | {acodec}"
-                detail = f"{label}{detail_suffix}"
+                asr_suffix = f" | {int(asr)} Hz" if asr else ""
+                label = f"{int(abr) if abr else '?'} kbps | {ext} | {acodec} | ID {format_id}"
+                detail = f"{label}{asr_suffix}{detail_suffix}"
                 audio_entries.append({
                     "label": label,
                     "detail": detail,
                     "format_selector": format_id,
                     "abr": abr,
+                    "ext": fmt.get("ext") or "audio",
                     "requires_ffmpeg": False,
                 })
 
@@ -1382,6 +1744,7 @@ class ImageResizerApp(ctk.CTk):
                 "detail": "Lấy âm thanh từ video gốc. Cần FFmpeg để xuất ra file âm thanh riêng.",
                 "format_selector": "bestaudio/best",
                 "abr": 0,
+                "ext": "mp3",
                 "requires_ffmpeg": True,
             })
 
